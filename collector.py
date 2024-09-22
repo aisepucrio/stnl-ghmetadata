@@ -1,5 +1,5 @@
 import requests
-import os 
+import os
 import json
 from dotenv import load_dotenv
 
@@ -11,7 +11,6 @@ class GithubAPI:
     def __init__(self):
         """
         Inicializa a classe com o token de autenticação.
-        :param token: Token de autenticação do GitHub.
         """
 
         load_dotenv()
@@ -19,6 +18,30 @@ class GithubAPI:
         self.token = os.getenv('GITHUB_TOKEN')
         self.base_url = 'https://api.github.com'
         self.headers = {'Authorization': f'token {self.token}'}
+
+    def search_repositories(self, query, sort='stars', order='desc', per_page=10):
+        """
+        Pesquisa repositórios no GitHub com base em filtros.
+
+        :param query: Termo de busca, incluindo filtros (por exemplo, linguagem, número de estrelas, etc.).
+        :param sort: Critério de ordenação (stars, forks, etc.).
+        :param order: Ordem (asc para crescente, desc para decrescente).
+        :param per_page: Número de repositórios a serem retornados.
+        :return: Lista de repositórios que correspondem à pesquisa ou None em caso de erro.
+        """
+        url = f'{self.base_url}/search/repositories'
+        params = {
+            'q': query,
+            'sort': sort,
+            'order': order,
+            'per_page': per_page
+        }
+        response = requests.get(url, headers=self.headers, params=params)
+        if response.status_code == 200:
+            return response.json().get('items', [])
+        else:
+            print(f"Erro {response.status_code}: {response.json().get('message')}")
+            return None
 
     def get_repo_metadata(self, owner, repo):
         """
@@ -61,66 +84,6 @@ class GithubAPI:
             print(f"Erro {response.status_code}: {response.json().get('message')}")
             return None
 
-    def get_contributors_count(self, owner, repo):
-        """
-        Coleta o número de colaboradores de um repositório GitHub. 
-        Retorna apenas o número, já que repositórios grandes podem gerar erro ao tentar listar todos.
-        
-        Se não for possível obter o número exato, retorna uma estimativa (>5000, etc.).
-        
-        :param owner: Nome do dono do repositório (usuário ou organização).
-        :param repo: Nome do repositório.
-        :return: Número de colaboradores ou uma estimativa em caso de erro.
-        """
-        url = f'{self.base_url}/repos/{owner}/{repo}/contributors?per_page=1'
-        response = requests.get(url, headers=self.headers)
-        if response.status_code == 200:
-            contributors_count = response.headers.get('Link', None)
-            if contributors_count and 'rel="last"' in contributors_count:
-                last_page_url = contributors_count.split('rel="last"')[0].split('<')[-1].split('>')[0]
-                last_page = int(last_page_url.split('page=')[-1])
-                return last_page
-            return 1
-        elif response.status_code == 403:
-            print("Número de colaboradores muito grande para ser listado via API.")
-            # Retorna uma estimativa quando não for possível obter o número exato
-            return ">5000"  # Estimativa genérica para grandes repositórios
-        else:
-            print(f"Erro {response.status_code}: {response.json().get('message')}")
-        return None
-
-    def get_repo_commits(self, owner, repo):
-        """
-        Coleta o número de commits do repositório.
-        
-        :param owner: Nome do dono do repositório (usuário ou organização).
-        :param repo: Nome do repositório.
-        :return: Número de commits ou None em caso de erro.
-        """
-        url = f'{self.base_url}/repos/{owner}/{repo}/commits'
-        response = requests.get(url, headers=self.headers)
-        if response.status_code == 200:
-            return len(response.json())
-        else:
-            print(f"Erro {response.status_code}: {response.json().get('message')}")
-            return None
-
-    def get_repo_pulls(self, owner, repo):
-        """
-        Coleta o número de pull requests abertos.
-        
-        :param owner: Nome do dono do repositório (usuário ou organização).
-        :param repo: Nome do repositório.
-        :return: Número de pull requests ou None em caso de erro.
-        """
-        url = f'{self.base_url}/repos/{owner}/{repo}/pulls'
-        response = requests.get(url, headers=self.headers)
-        if response.status_code == 200:
-            return len(response.json())
-        else:
-            print(f"Erro {response.status_code}: {response.json().get('message')}")
-            return None
-
 
 def save_metadata_to_json(metadata, filename='output.json'):
     """
@@ -159,50 +122,80 @@ def format_languages(languages):
         "description": "The 'bytes' field represents the total number of bytes of code written in this language, and 'percentage' shows its proportion relative to the total."
     }
 
+def load_config(config_file='configs.json'):
+    """
+    Carrega as configurações do arquivo JSON.
+
+    :param config_file: Caminho para o arquivo de configuração JSON.
+    :return: Dicionário com as configurações carregadas.
+    """
+    try:
+        with open(config_file, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"Arquivo {config_file} não encontrado.")
+        return None
+    except json.JSONDecodeError:
+        print(f"Erro ao decodificar o arquivo {config_file}.")
+        return None
+
 
 def main():
     """
-    Função principal para coletar e salvar metadados de um repositório do GitHub.
+    Função principal para coletar e salvar metadados de repositórios do GitHub.
     """
-    owner = "torvalds"  # Exemplo: "torvalds"
-    repo = "linux"  # Exemplo: "linux"
+    # Carrega as configurações do arquivo JSON
+    config = load_config()
+    if not config:
+        return
+
+    # Defina os filtros da pesquisa a partir do arquivo de configuração
+    language = config.get("language", "python")
+    stars = config.get("stars", ">=500")
+    query = f"language:{language} stars:{stars}"
+    per_page = config.get("per_page", 5)
+    sort = config.get("sort", "stars")
+    order = config.get("order", "desc")
 
     # Cria uma instância da API do GitHub
     api = GithubAPI()
     
-    # Coleta os principais metadados do repositório
-    metadata = api.get_repo_metadata(owner, repo)
+    # Busca repositórios de acordo com os filtros
+    repositories = api.search_repositories(query=query, sort=sort, order=order, per_page=per_page)
 
-    # Coleta as linguagens utilizadas no repositório
-    languages = api.get_repo_languages(owner, repo)
+    if not repositories:
+        print("Nenhum repositório encontrado.")
+        return
 
-    # Coleta o número de colaboradores
-    contributors_count = api.get_contributors_count(owner, repo)
+    # Itera sobre os repositórios encontrados e coleta os metadados
+    all_metadata = []
+    for repo in repositories:
+        owner = repo["owner"]["login"]
+        repo_name = repo["name"]
 
-    # Coleta o número de commits
-    commits_count = api.get_repo_commits(owner, repo)
+        # Coleta os principais metadados do repositório
+        metadata = api.get_repo_metadata(owner, repo_name)
 
-    # Coleta o número de pull requests
-    pulls_count = api.get_repo_pulls(owner, repo)
+        # Coleta as linguagens utilizadas no repositório
+        languages = api.get_repo_languages(owner, repo_name)
 
-    # Organiza os dados de forma mais clara
-    organized_data = {
-        "name": metadata["name"],
-        "owner": metadata["owner"],
-        "stars": metadata["stars"],
-        "watchers": metadata["watchers"],
-        "forks": metadata["forks"],
-        "open_issues": metadata["open_issues"],
-        "default_branch": metadata["default_branch"],
-        "commits_count": commits_count,
-        "pull_requests_count": pulls_count,
-        "contributors_count": contributors_count,
-        "languages_info": format_languages(languages) if languages else None
-    }
+        # Organiza os dados de forma mais clara
+        organized_data = {
+            "name": metadata["name"],
+            "owner": metadata["owner"],
+            "stars": metadata["stars"],
+            "watchers": metadata["watchers"],
+            "forks": metadata["forks"],
+            "open_issues": metadata["open_issues"],
+            "default_branch": metadata["default_branch"],
+            "languages_info": format_languages(languages) if languages else None
+        }
+
+        all_metadata.append(organized_data)
 
     # Salva os metadados organizados em um arquivo JSON
-    save_metadata_to_json(organized_data)
+    save_metadata_to_json(all_metadata)
 
 
-print("Iniciando a coleta de metadados do repositório...")
+print("Iniciando a coleta de repositórios do GitHub com filtros...")
 main()
