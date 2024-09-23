@@ -2,7 +2,7 @@
 # Repositório de Metadados
 
 ## Descrição
-Este projeto tem como objetivo coletar e processar metadados de repositórios de código hospedados em plataformas como GitHub e GitLab. Os dados coletados incluem histórico de commits, informações de contribuidores, issues, pull requests, releases e outras informações relevantes. O projeto é ideal para desenvolvedores, analistas e pesquisadores interessados em realizar análises ou auditorias de projetos de código aberto ou privados.
+Este projeto tem como objetivo coletar e processar metadados de repositórios de código hospedados em plataformas como GitHub e GitLab. Os dados coletados incluem informações como o nome do repositório, proprietário, número de estrelas, número de observadores, forks, issues abertas, branch padrão, descrição, quantidade de contribuidores e linguagens utilizadas. O projeto é ideal para desenvolvedores, analistas e pesquisadores interessados em realizar análises ou auditorias de projetos de código aberto ou privados.
 
 ## Funcionalidades
 - Extração de detalhes completos dos commits (autor, data, mensagem)
