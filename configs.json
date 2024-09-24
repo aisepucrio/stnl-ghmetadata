@@ -1,8 +1,9 @@
 {
-    "language": "python",
-    "stars": "<=1",
-    "number_of_repositories": 40,
+    "language": ["python", "java", "C"],
+    "stars": "500..1000",
+    "fork": "false",
+    "min_contributors": 5,
+    "number_of_repositories": 30,
     "sort": "stars",
-    "order": "desc",
-    "threads": 24
+    "threads": 10
 }

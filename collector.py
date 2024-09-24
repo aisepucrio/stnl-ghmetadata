@@ -21,7 +21,7 @@ class GithubAPI:
         self.base_url = 'https://api.github.com'
         self.headers = {'Authorization': f'token {self.token}'}
 
-    def search_repositories(self, query, sort='stars', order='desc', per_page=10):
+    def search_repositories(self, query, sort='stars', order='desc', per_page=10, **filters):
         """
         Pesquisa repositórios no GitHub com base em filtros.
 
@@ -29,9 +29,15 @@ class GithubAPI:
         :param sort: Critério de ordenação (stars, forks, etc.).
         :param order: Ordem (asc para crescente, desc para decrescente).
         :param per_page: Número de repositórios a serem retornados.
+        :param filters: Filtros adicionais como fork, created, pushed, author, etc.
         :return: Lista de repositórios que correspondem à pesquisa ou None em caso de erro.
         """
         url = f'{self.base_url}/search/repositories'
+        
+        # Adicionar filtros extras à query de pesquisa
+        filter_query = ' '.join([f'{key}:{value}' for key, value in filters.items()])
+        query += f" {filter_query}"
+
         params = {
             'q': query,
             'sort': sort,
@@ -205,13 +211,14 @@ def load_config(config_file='configs.json'):
         return None
 
 
-def process_repo(api, repo):
+def process_repo(api, repo, min_contributors=None):
     """
-    Processa o repositório para coletar metadados e organiza as linguagens.
+    Processa o repositório para coletar metadados e organiza as linguagens, incluindo um filtro opcional para número mínimo de contribuidores.
     
     :param api: Instância da API do GitHub.
     :param repo: Repositório a ser processado.
-    :return: Dicionário contendo os dados organizados do repositório.
+    :param min_contributors: Número mínimo de contribuidores para considerar o repositório.
+    :return: Dicionário contendo os dados organizados do repositório ou None se não cumprir os critérios.
     """
     owner = repo["owner"]["login"]
     repo_name = repo["name"]
@@ -221,6 +228,12 @@ def process_repo(api, repo):
 
     # Coleta as linguagens utilizadas no repositório
     languages = api.get_repo_languages(owner, repo_name)
+
+    # Verifica se o repositório cumpre o requisito mínimo de contribuidores
+    contributors_count = metadata["contributors_count"]["contributors_count"]
+    if min_contributors is not None and contributors_count < min_contributors:
+        print(f"Repositório {repo_name} ({owner}) ignorado: número de contribuidores ({contributors_count}) é menor que {min_contributors}.")
+        return None
 
     # Organiza os dados de forma mais clara
     organized_data = {
@@ -233,7 +246,7 @@ def process_repo(api, repo):
         "default_branch": metadata["default_branch"],
         "description": metadata["description"] if metadata["description"] else "Descrição não disponível",
         "html_url": metadata["html_url"] if metadata["html_url"] else "Link não disponível",
-        "contributors_count": metadata["contributors_count"] if metadata["contributors_count"] else "Contribuidores não disponíveis",
+        "contributors_count": contributors_count,
         "languages_info": format_languages(languages) if languages else "Linguagens não disponíveis"
     }
 
@@ -252,7 +265,31 @@ def main():
     # Defina os filtros da pesquisa a partir do arquivo de configuração
     language = config.get("language", "python")
     stars = config.get("stars", ">=500")
+    fork = config.get("fork", "true")
+    created = config.get("created", None)
+    pushed = config.get("pushed", None)
+    size = config.get("size", None)
+    user = config.get("author", None)  # Usar "user" em vez de "author"
+    min_contributors = config.get("min_contributors", None)
+
+    # Montar a query básica de pesquisa
     query = f"language:{language} stars:{stars}"
+    
+    if user:
+        query += f" user:{user}"
+    
+    # Adiciona mais filtros à busca
+    additional_filters = {}
+    if fork:
+        additional_filters["fork"] = fork
+    if created:
+        additional_filters["created"] = created
+    if pushed:
+        additional_filters["pushed"] = pushed
+    if size:
+        additional_filters["size"] = size
+
+    # Filtros de ordenação
     per_page = config.get("number_of_repositories", 5)
     sort = config.get("sort", "stars")
     order = config.get("order", "desc")
@@ -265,7 +302,7 @@ def main():
     api = GithubAPI()
 
     # Busca repositórios de acordo com os filtros
-    repositories = api.search_repositories(query=query, sort=sort, order=order, per_page=per_page)
+    repositories = api.search_repositories(query=query, sort=sort, order=order, per_page=per_page, **additional_filters)
 
     if not repositories:
         print("Nenhum repositório encontrado.")
@@ -275,19 +312,19 @@ def main():
 
     # Usa ThreadPoolExecutor para executar em múltiplas threads
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
-        # Envia cada repositório para ser processado em uma thread
-        futures = {executor.submit(process_repo, api, repo): repo for repo in repositories}
+        futures = {executor.submit(process_repo, api, repo, min_contributors): repo for repo in repositories}
 
         for future in as_completed(futures):
             try:
                 data = future.result()
-                all_metadata.append(data)
+                if data:
+                    all_metadata.append(data)
             except Exception as e:
                 repo = futures[future]
                 print(f"Erro ao processar o repositório {repo['name']}: {e}")
 
-    # Salva os metadados organizados em um arquivo JSON
     save_metadata_to_json(all_metadata)
+
 
 
 print("Iniciando a coleta de repositórios do GitHub com filtros...")
