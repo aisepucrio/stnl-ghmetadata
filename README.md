@@ -1,78 +1,75 @@
 
-# Repositório de Metadados
+# Coletor de Metadados de Repositórios GitHub
 
-## Descrição
-Este projeto tem como objetivo coletar e processar metadados de repositórios de código hospedados em plataformas como GitHub e GitLab. Os dados coletados incluem informações como o nome do repositório, proprietário, número de estrelas, número de observadores, forks, issues abertas, branch padrão, descrição, quantidade de contribuidores e linguagens utilizadas. O projeto é ideal para desenvolvedores, analistas e pesquisadores interessados em realizar análises ou auditorias de projetos de código aberto ou privados.
+Este projeto recupera metadados de repositórios do GitHub usando a API do GitHub. O script permite que você pesquise repositórios com critérios específicos, colete metadados e salve os resultados em um arquivo JSON.
+
+## Link do Repositório
+
+Você pode encontrar o repositório no seguinte link:
+[GitHub Repository](https://github.com/aisepucrio/stnl-ghmetadata)
+
+## Visão Geral do Script
+
+O script principal utilizado para executar a coleta de metadados é o `collector.py`.
+
+## Exemplos de Metadados Coletados
+
+O script coleta os seguintes tipos de metadados de cada repositório:
+
+- **Nome** do repositório
+- **Proprietário** (usuário ou organização)
+- **Estrelas** (quantidade de estrelas)
+- **Forks** (quantidade de forks)
+- **Contribuidores** (quantidade de pessoas que contribuíram)
+- **Linguagens** utilizadas no repositório e seus percentuais
+- **Branch padrão** (branch principal do repositório)
+- **Descrição** do repositório (se disponível)
+- **Data do último push** (última vez que houve um commit no repositório)
+- **Link** para o repositório no GitHub
 
 ## Funcionalidades
-- Extração de detalhes completos dos commits (autor, data, mensagem)
-- Coleta de informações de contribuidores e suas estatísticas de contribuição
-- Extração de dados sobre issues e pull requests (status, autor, datas)
-- Análise de releases e tags
-- Suporte para múltiplas plataformas (GitHub, GitLab)
-- API simples para integração com outras aplicações
-- Exportação de dados em formatos JSON e CSV
 
-## Pré-requisitos
-Antes de iniciar, certifique-se de ter as seguintes ferramentas instaladas:
-- **Python 3.x**
-- **Git**
-- Uma conta no GitHub/GitLab (se for necessário autenticação via API)
+- Pesquisa repositórios do GitHub por linguagem, estrelas, data de criação e mais.
+- Recupera metadados como nome do repositório, estrelas, forks, contribuidores e linguagens usadas.
+- Salva os metadados coletados em um arquivo JSON.
 
-## Instalação
-Siga as etapas abaixo para configurar o projeto localmente:
+## Filtros Suportados
 
-1. Clone este repositório:
-   ```bash
-   git clone https://github.com/usuario/repo-metadados.git
+O script suporta os seguintes filtros principais ao pesquisar por repositórios:
+
+1. **Linguagem**: Filtra pela linguagem de programação (por exemplo, `language:python`).
+2. **Estrelas**: Filtra pelo número de estrelas que o repositório possui (por exemplo, `stars:>500`).
+3. **Forks**: Filtra pelo número de forks (por exemplo, `forks:>50`).
+4. **Data de Criação**: Filtra pela data de criação do repositório (por exemplo, `created:>2020-01-01`).
+5. **Último Push**: Filtra pela data do último push (por exemplo, `pushed:>2023-01-01`).
+6. **Tamanho**: Filtra pelo tamanho do repositório em KB (por exemplo, `size:100..500`).
+7. **Usuário**: Filtra pelo proprietário do repositório (por exemplo, `user:torvalds`).
+8. **Arquivado**: Filtra por repositórios arquivados (por exemplo, `archived:true`).
+
+## Uso
+
+1. Clone o repositório do GitHub:
+
+   ```
+   git clone https://github.com/aisepucrio/stnl-ghmetadata.git
    ```
 
-2. Entre na pasta do repositório:
-   ```bash
-   cd repo-metadados
-   ```
+2. Instale as dependências necessárias:
 
-3. Instale as dependências:
-   ```bash
+   ```
    pip install -r requirements.txt
    ```
 
-## Uso
-Para coletar metadados de um repositório GitHub, execute o seguinte comando:
+3. Configure os filtros editando o arquivo `configs.json` para definir os parâmetros desejados.
 
-```bash
-python obter_metadados.py --repositorio https://github.com/usuario/repositorio.git
-```
+4. Execute o script:
 
-### Exemplos de Uso:
-
-- Coletar metadados de um repositório específico no GitHub:
-  ```bash
-  python obter_metadados.py --repositorio https://github.com/exemplo/repo.git
-  ```
-
-- Exportar os dados coletados em formato CSV:
-  ```bash
-  python obter_metadados.py --repositorio https://github.com/exemplo/repo.git --output csv
-  ```
-
-## Contribuições
-Contribuições são bem-vindas! Se você deseja sugerir melhorias, corrigir bugs ou adicionar novas funcionalidades, siga os passos abaixo:
-
-1. Faça um fork do projeto
-2. Crie uma nova branch:
-   ```bash
-   git checkout -b minha-feature
    ```
-3. Faça suas alterações e adicione os commits:
-   ```bash
-   git commit -m "Minha nova feature"
+   python collector.py
    ```
-4. Envie suas alterações para o GitHub:
-   ```bash
-   git push origin minha-feature
-   ```
-5. Abra um Pull Request no repositório original
+
+5. O script gerará um arquivo JSON contendo os metadados dos repositórios que correspondem aos filtros aplicados.
 
 ## Licença
-Este projeto está licenciado sob a Licença MIT - veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+
+Este projeto é licenciado sob a Licença MIT.
