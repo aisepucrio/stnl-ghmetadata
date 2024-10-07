@@ -1,10 +1,10 @@
 import requests
 import os
 import json
+import multiprocessing
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import multiprocessing
-
+from bs4 import BeautifulSoup
 class GithubAPI:
     """
     Classe para interagir com a API do GitHub.
@@ -88,7 +88,7 @@ class GithubAPI:
                 "description": data.get("description"),
                 "html_url": data.get("html_url"),
                 "keywords": self.get_repo_keywords(owner, repo),
-                "contributors_count": self.get_repo_contributors(owner, repo),
+                "contributors_count": self.get_contributors_from_html(owner, repo),
                 "readme": self.get_repo_readme(owner, repo),
                 "labels_count": self.get_repo_labels_count(owner, repo)
             }
@@ -186,6 +186,42 @@ class GithubAPI:
             "contributors_count": total_contributors,
             "estimated": is_estimated
         }
+    
+    def get_contributors_from_html(self, owner, repo):
+        """
+        Obtém o número de contribuidores de um repositório GitHub através da página HTML do repositório.
+        
+        :param owner: Nome do dono do repositório (usuário ou organização).
+        :param repo: Nome do repositório.
+        :return: Número de contribuidores ou None se não encontrado.
+        """
+        url = f'https://github.com/{owner}/{repo}'
+        response = requests.get(url)
+        
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.content, 'lxml')
+            # Encontra o elemento com a classe "Counter ml-1" que contém o número de contribuidores
+            contributors_element = soup.find('a', {'href': f'/{owner}/{repo}/graphs/contributors'})
+            
+            if not contributors_element:
+                print(f"Contribuidores não encontrados para o repositório {repo} ({owner}).")
+                return None
+
+            span_element = contributors_element.find('span', class_='Counter ml-1')
+            if span_element and 'title' in span_element.attrs:
+                contributors_text = span_element['title']  # Pega o valor do atributo title
+                try:
+                    return int(contributors_text.replace(',', ''))  # Remove as vírgulas e converte para int
+                except ValueError:
+                    print(f"Erro ao converter o número de contribuidores para o repositório {repo} ({owner}).")
+                    return None
+            else:
+                print(f"Elemento <span> de contribuidores não encontrado para o repositório {repo} ({owner}).")
+                return None
+            
+        else:
+            print(f"Erro ao acessar a página HTML do repositório {repo} ({owner}). Status code: {response.status_code}")
+            return None
 
     def get_repo_organization(self, owner, repo):
         """
@@ -312,8 +348,8 @@ def process_repo(api, repo, min_contributors=None):
     languages = api.get_repo_languages(owner, repo_name)
 
     # Verifica se o repositório cumpre o requisito mínimo de contribuidores
-    contributors_count = metadata["contributors_count"]["contributors_count"]
-    if min_contributors is not None and contributors_count < min_contributors:
+    contributors_count = metadata["contributors_count"]
+    if contributors_count is None or (min_contributors is not None and contributors_count < min_contributors):
         print(f"Repositório {repo_name} ({owner}) ignorado: número de contribuidores ({contributors_count}) é menor que {min_contributors}.")
         return None
 
