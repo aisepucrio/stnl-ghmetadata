@@ -1,9 +1,10 @@
 {
-    "language": ["python", "java", "C"],
-    "stars": "500..1000",
+    "language": ["python"],
+    "stars": "10..5000",
     "fork": "false",
-    "min_contributors": 5,
-    "number_of_repositories": 30,
+    "min_contributors": 1,
+    "number_of_repositories": 2,
     "sort": "stars",
-    "threads": 10
+    "threads": 10,
+    "keywords": ["machine-learning", "deep-learning", "neural-networks"]
 }

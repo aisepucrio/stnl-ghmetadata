@@ -21,19 +21,20 @@ class GithubAPI:
         self.base_url = 'https://api.github.com'
         self.headers = {'Authorization': f'token {self.token}'}
 
-    def search_repositories(self, query, sort='stars', order='desc', per_page=10, **filters):
+    def search_repositories_filtered(self, query, sort='stars', order='desc', per_page=10, max_repos=10, **filters):
         """
-        Pesquisa repositórios no GitHub com base em filtros.
+        Pesquisa repositórios no GitHub e aplica filtros dinamicamente até atingir o número máximo desejado.
 
         :param query: Termo de busca, incluindo filtros (por exemplo, linguagem, número de estrelas, etc.).
         :param sort: Critério de ordenação (stars, forks, etc.).
         :param order: Ordem (asc para crescente, desc para decrescente).
-        :param per_page: Número de repositórios a serem retornados.
-        :param filters: Filtros adicionais como fork, created, pushed, author, etc.
+        :param per_page: Número de repositórios a serem buscados por página.
+        :param max_repos: Número máximo de repositórios a serem coletados.
+        :param filters: Filtros adicionais como fork, created, pushed, author, keywords, organization, etc.
         :return: Lista de repositórios que correspondem à pesquisa ou None em caso de erro.
         """
         url = f'{self.base_url}/search/repositories'
-        
+
         # Adicionar filtros extras à query de pesquisa
         filter_query = ' '.join([f'{key}:{value}' for key, value in filters.items()])
         query += f" {filter_query}"
@@ -42,18 +43,30 @@ class GithubAPI:
             'q': query,
             'sort': sort,
             'order': order,
-            'per_page': per_page
+            'per_page': min(per_page, max_repos),  # Garantir que per_page não exceda max_repos
+            'page': 1  # Começar pela primeira página
         }
-        response = requests.get(url, headers=self.headers, params=params)
-        if response.status_code == 200:
-            return response.json().get('items', [])
-        else:
-            print(f"Erro {response.status_code}: {response.json().get('message')}")
-            return None
+
+        all_repos = []
+        while len(all_repos) < max_repos:
+            response = requests.get(url, headers=self.headers, params=params)
+            if response.status_code == 200:
+                repos = response.json().get('items', [])
+                if not repos:
+                    break  # Se não houver mais repositórios, parar
+                # Adicionar repositórios à lista, parando quando atingir o máximo desejado
+                all_repos.extend(repos)
+                params['page'] += 1  # Ir para a próxima página
+            else:
+                print(f"Erro {response.status_code}: {response.json().get('message')}")
+                break
+
+        # Retornar o número exato de repositórios solicitados
+        return all_repos[:max_repos] if all_repos else None
 
     def get_repo_metadata(self, owner, repo):
         """
-        Coleta os metadados de um repositório GitHub, incluindo o link, descrição, README e contribuidores.
+        Coleta os metadados de um repositório GitHub, incluindo o link, descrição e contribuidores.
         
         :param owner: Nome do dono do repositório (usuário ou organização).
         :param repo: Nome do repositório.
@@ -66,6 +79,7 @@ class GithubAPI:
             metadata = {
                 "name": data.get("name"),
                 "owner": data.get("owner", {}).get("login"),
+                "organization": self.get_repo_organization(owner, repo),
                 "stars": data.get("stargazers_count"),
                 "watchers": data.get("watchers_count"),
                 "forks": data.get("forks_count"),
@@ -73,7 +87,10 @@ class GithubAPI:
                 "default_branch": data.get("default_branch"),
                 "description": data.get("description"),
                 "html_url": data.get("html_url"),
-                "contributors_count": self.get_repo_contributors(owner, repo)
+                "keywords": self.get_repo_keywords(owner, repo),
+                "contributors_count": self.get_repo_contributors(owner, repo),
+                "readme": self.get_repo_readme(owner, repo),
+                "labels_count": self.get_repo_labels_count(owner, repo)
             }
 
             # Checa se há algum dado faltando e imprime mensagens apropriadas
@@ -84,6 +101,23 @@ class GithubAPI:
             return metadata
         else:
             print(f"Erro {response.status_code}: {response.json().get('message')} para o repositório {repo} ({owner})")
+            return None
+        
+    def get_repo_readme(self, owner, repo):
+        """
+        Obtém o conteúdo do README de um repositório GitHub.
+        
+        :param owner: Nome do dono do repositório (usuário ou organização).
+        :param repo: Nome do repositório.
+        :return: Conteúdo do README em texto ou None se não encontrado.
+        """
+        url = f'{self.base_url}/repos/{owner}/{repo}/readme'
+        headers = {'Authorization': f'token {self.token}', 'Accept': 'application/vnd.github.v3.raw'}
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            return response.text  # Conteúdo do README
+        else:
+            print(f"README não encontrado para o repositório {repo} ({owner}).")
             return None
 
     def get_repo_languages(self, owner, repo):
@@ -153,6 +187,54 @@ class GithubAPI:
             "estimated": is_estimated
         }
 
+    def get_repo_organization(self, owner, repo):
+        """
+        Obtém a organização do repositório, se existir.
+
+        :param owner: Nome do dono do repositório (usuário ou organização).
+        :param repo: Nome do repositório.
+        :return: Nome da organização ou None se não for um repositório de organização.
+        """
+        url = f'{self.base_url}/repos/{owner}/{repo}'
+        response = requests.get(url, headers=self.headers)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('organization'):
+                return data['organization'].get('login')
+        return None
+    
+    def get_repo_keywords(self, owner, repo):
+        """
+        Obtém as palavras-chave do repositório.
+
+        :param owner: Nome do dono do repositório (usuário ou organização).
+        :param repo: Nome do repositório.
+        :return: Lista de palavras-chave ou None se não for um repositório de organização.
+        """
+        url = f'{self.base_url}/repos/{owner}/{repo}/topics'
+        response = requests.get(url, headers=self.headers)
+        if response.status_code == 200: 
+            return response.json().get('names', [])
+        else:
+            print(f"Palavras-chave não encontradas para o repositório {repo} ({owner}).")
+            return None
+    
+    def get_repo_labels_count(self, owner, repo):
+        """
+        Obtém a quantidade de labels de um repositório GitHub.
+        
+        :param owner: Nome do dono do repositório (usuário ou organização).
+        :param repo: Nome do repositório.
+        :return: Quantidade de labels ou None se não encontrado.
+        """
+        url = f'{self.base_url}/repos/{owner}/{repo}/labels'
+        response = requests.get(url, headers=self.headers)
+        if response.status_code == 200:
+            return len(response.json())  # Contagem de labels
+        else:
+            print(f"Labels não encontrados para o repositório {repo} ({owner}).")
+            return None
+
 def save_metadata_to_json(metadata, filename='output.json'):
     """
     Salva os metadados coletados em um arquivo JSON.
@@ -161,8 +243,8 @@ def save_metadata_to_json(metadata, filename='output.json'):
     :param filename: Nome do arquivo onde os metadados serão salvos.
     """
     try:
-        with open(filename, 'w') as f:
-            json.dump(metadata, f, indent=4)
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, indent=4, ensure_ascii=False)
         print(f'Metadados salvos em {filename}')
     except IOError as e:
         print(f'Erro ao salvar os metadados: {e}')
@@ -239,6 +321,7 @@ def process_repo(api, repo, min_contributors=None):
     organized_data = {
         "name": metadata["name"],
         "owner": metadata["owner"],
+        "organization": metadata["organization"],
         "stars": metadata["stars"],
         "watchers": metadata["watchers"],
         "forks": metadata["forks"],
@@ -247,11 +330,13 @@ def process_repo(api, repo, min_contributors=None):
         "description": metadata["description"] if metadata["description"] else "Descrição não disponível",
         "html_url": metadata["html_url"] if metadata["html_url"] else "Link não disponível",
         "contributors_count": contributors_count,
-        "languages_info": format_languages(languages) if languages else "Linguagens não disponíveis"
+        "keywords": metadata["keywords"],
+        "languages_info": format_languages(languages) if languages else "Linguagens não disponíveis",
+        "readme": metadata["readme"] if metadata["readme"] else "README não disponível",
+        "labels_count": metadata["labels_count"] if metadata["labels_count"] else "Labels não disponíveis"
     }
 
     return organized_data
-
 
 def main():
     """
@@ -269,8 +354,10 @@ def main():
     created = config.get("created", None)
     pushed = config.get("pushed", None)
     size = config.get("size", None)
-    user = config.get("author", None)  # Usar "user" em vez de "author"
-    min_contributors = config.get("min_contributors", None)
+    user = config.get("author", None)
+    min_contributors = config.get("min_contributors", 1)
+    keywords = config.get("keywords", None)
+    organization = config.get("organization", None)
 
     # Montar a query básica de pesquisa
     query = f"language:{language} stars:{stars}"
@@ -288,9 +375,19 @@ def main():
         additional_filters["pushed"] = pushed
     if size:
         additional_filters["size"] = size
+    if organization:
+        query += f" org:{organization}"
+
+    # Se keywords for uma lista, adicionar todas elas
+    if keywords:
+        if isinstance(keywords, list):
+            keywords_query = ' '.join([f"topic:{keyword}" for keyword in keywords])
+            query += f" {keywords_query}"
+        else:
+            query += f" topic:{keywords}"
 
     # Filtros de ordenação
-    per_page = config.get("number_of_repositories", 5)
+    number_of_repositories = config.get("number_of_repositories", 20)
     sort = config.get("sort", "stars")
     order = config.get("order", "desc")
 
@@ -301,8 +398,15 @@ def main():
     # Cria uma instância da API do GitHub
     api = GithubAPI()
 
-    # Busca repositórios de acordo com os filtros
-    repositories = api.search_repositories(query=query, sort=sort, order=order, per_page=per_page, **additional_filters)
+    # Busca repositórios de acordo com os filtros e limite de número de repositórios
+    repositories = api.search_repositories_filtered(
+        query=query, 
+        sort=sort, 
+        order=order, 
+        per_page=100,  # Usar um valor alto para garantir que mais resultados sejam obtidos por página
+        max_repos=number_of_repositories, 
+        **additional_filters
+    )
 
     if not repositories:
         print("Nenhum repositório encontrado.")
@@ -324,8 +428,6 @@ def main():
                 print(f"Erro ao processar o repositório {repo['name']}: {e}")
 
     save_metadata_to_json(all_metadata)
-
-
 
 print("Iniciando a coleta de repositórios do GitHub com filtros...")
 main()
