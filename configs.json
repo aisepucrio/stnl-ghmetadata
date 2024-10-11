@@ -3,7 +3,8 @@
     "stars": "10..5000",
     "fork": "false",
     "min_contributors": 1,
-    "number_of_repositories": 100,
+    "number_of_repositories": 1000,
+    "organization": "microsoft",
     "sort": "stars",
     "threads": 10,
     "keywords": ["machine-learning", "deep-learning", "neural-networks"]
